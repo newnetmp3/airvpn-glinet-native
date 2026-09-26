@@ -1,0 +1,111 @@
+#!/bin/sh
+set -eu
+
+has_section="$(uci -q get airvpn_native.main 2>/dev/null || true)"
+[ -n "$has_section" ] || {
+	uci set airvpn_native.main=main
+}
+
+set_default() {
+	k="$1"; v="$2"
+	cur="$(uci -q get "airvpn_native.main.$k" 2>/dev/null || true)"
+	[ -n "$cur" ] || uci set "airvpn_native.main.$k=$v"
+}
+
+# Existing installations keep explicit choices. Only missing/empty values gain
+# the current defaults.
+set_default device 'GLinet'
+set_default selectors 'earth'
+set_default protocol 'wireguard_1_udp_1637'
+set_default generator_strategy 'adaptive'
+set_default resolve 'off'
+set_default ip_layer 'ipv4'
+set_default dns_mode 'airvpn'
+set_default mtu '1320'
+set_default keepalive '15'
+set_default group_name 'AirVPN'
+set_default prefix 'AirVPN'
+set_default discovery_mode 'best_score'
+set_default min_score '0'
+set_default max_load '100'
+set_default sort_column 'smart_rank'
+set_default sort_direction 'desc'
+set_default favorites ''
+set_default server_exclusions ''
+set_default latency_candidates '12'
+set_default refresh_min_seconds '60'
+set_default cache_min_servers '20'
+set_default smart_rank '1'
+set_default column_order 'name,country,city,score,load,bandwidth,effective_bandwidth,max_bandwidth,available_bandwidth,latency,users,health,entry_ip'
+set_default hidden_columns ''
+
+for kv in \
+	local_access=0 \
+	masquerade=1 \
+	cleanup_managed=1 \
+	auto_sync=0 \
+	strict_target=1 \
+	native_reload=1 \
+	country_aliases=1 \
+	health_only=1 \
+	use_server_discovery=1
+do
+	k="${kv%%=*}"; v="${kv#*=}"
+	cur="$(uci -q get "airvpn_native.main.$k" 2>/dev/null || true)"
+	[ -n "$cur" ] || uci set "airvpn_native.main.$k=$v"
+done
+
+# Empty strings are meaningful for these filters, so create only when absent.
+for k in include_server exclude_server country_filter; do
+	uci -q get "airvpn_native.main.$k" >/dev/null 2>&1 || uci set "airvpn_native.main.$k="
+done
+
+uci commit airvpn_native
+
+
+# v0.6.9: move installations still using the old untouched score/desc default
+# to the new preferred Available Bandwidth ranking once. Preserve other sorts.
+if [ "$(uci -q get airvpn_native.main.sort_default_v069 2>/dev/null || true)" != "1" ]; then
+	cur_sort="$(uci -q get airvpn_native.main.sort_column 2>/dev/null || true)"
+	cur_dir="$(uci -q get airvpn_native.main.sort_direction 2>/dev/null || true)"
+	if [ -z "$cur_sort" ] || { [ "$cur_sort" = "score" ] && { [ -z "$cur_dir" ] || [ "$cur_dir" = "desc" ]; }; }; then
+		uci set airvpn_native.main.sort_column='available_bandwidth'
+		uci set airvpn_native.main.sort_direction='desc'
+	fi
+	uci set airvpn_native.main.sort_default_v069='1'
+	uci commit airvpn_native
+fi
+
+
+# v0.7.4 preferred default: Available Bandwidth descending.
+if [ "$(uci -q get airvpn_native.main.sort_default_v074 2>/dev/null || true)" != "1" ]; then
+	cur_sort="$(uci -q get airvpn_native.main.sort_column 2>/dev/null || true)"
+	cur_dir="$(uci -q get airvpn_native.main.sort_direction 2>/dev/null || true)"
+	if [ -z "$cur_sort" ] || [ "$cur_sort" = "score" ]; then
+		uci set airvpn_native.main.sort_column='available_bandwidth'
+	fi
+	if [ -z "$cur_dir" ] || [ "$cur_dir" = "asc" ]; then
+		uci set airvpn_native.main.sort_direction='desc'
+	fi
+	uci set airvpn_native.main.sort_default_v074='1'
+	uci commit airvpn_native
+fi
+
+
+# v0.8.9 preferred default: Smart Rank descending.
+if [ "$(uci -q get airvpn_native.main.sort_default_v089 2>/dev/null || true)" != "1" ]; then
+	cur_sort="$(uci -q get airvpn_native.main.sort_column 2>/dev/null || true)"
+	cur_dir="$(uci -q get airvpn_native.main.sort_direction 2>/dev/null || true)"
+	case "$cur_sort" in
+		''|available_bandwidth|score)
+			uci set airvpn_native.main.sort_column='smart_rank'
+			;;
+	esac
+	case "$cur_dir" in
+		''|asc)
+			uci set airvpn_native.main.sort_direction='desc'
+			;;
+	esac
+	uci set airvpn_native.main.sort_default_v089='1'
+	uci commit airvpn_native
+fi

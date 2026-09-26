@@ -1,0 +1,104 @@
+#!/bin/sh
+set -eu
+
+HOME=/www/gl_home.html
+BACKUP=/www/gl_home.html.airvpn-native.orig
+META=/etc/airvpn-native/ui-loader.meta
+VERSIONED_BACKUP_DIR=/etc/airvpn-native/ui-loader-backups
+LOADER_VERSION=204
+# Inline bootstrap; the CGI response is no-store and the query string changes per load.
+CACHE_META='<meta id="airvpn-native-cache-control" http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">'
+LOADER="<script id=\"airvpn-native-loader\">(function(){if(window.__airvpnLoaderStarted)return;window.__airvpnLoaderStarted=1;var s=document.createElement(\"script\");s.src=\"/cgi-bin/airvpn-native-ui?v=${LOADER_VERSION}-\"+Date.now();s.async=false;s.dataset.airvpnLoader=\"${LOADER_VERSION}\";s.onerror=function(){window.__airvpnLoaderStarted=0;console.error(\"AirVPN UI loader failed\")};document.head.appendChild(s)})();</script>"
+
+loader_supported() {
+	fw="$(if [ -r /etc/glversion ]; then head -n1 /etc/glversion; else echo unknown; fi)"
+	case "$fw" in 4.9.1*|*4.9.1*) ;; *) echo "Unsupported/untested GL.iNet firmware: $fw" >&2; return 20;; esac
+	grep -q '</head>' "$HOME" || { echo "GL.iNet loader no longer contains </head>; refusing injection." >&2; return 21; }
+	grep -q '/js/app\.' "$HOME" || { echo "GL.iNet loader structure changed; refusing injection." >&2; return 22; }
+}
+
+save_loader_meta() {
+	mkdir -p /etc/airvpn-native
+	hash="$(sha256sum "$BACKUP" 2>/dev/null | awk '{print $1}')"; umask 077
+	{
+		echo "firmware=$(if [ -r /etc/glversion ]; then head -n1 /etc/glversion; else echo unknown; fi)"
+		echo "backup_sha256=$hash"
+		echo "loader_version=$LOADER_VERSION"
+		echo "patched=$(date +%s 2>/dev/null || echo 0)"
+	} >"${META}.tmp"
+	mv "${META}.tmp" "$META"
+}
+
+strip_old_tag() {
+	# Remove any AirVPN loader previously injected into the minified page.
+	sed \
+		-e 's#<script src="/airvpn-native-ui\.js[^>]*></script>##g' \
+		-e 's#<meta id="airvpn-native-cache-control"[^>]*>##g' \
+		-e 's#<script id="airvpn-native-loader">[^<]*</script>##g' \
+		"$1"
+}
+
+install_patch() {
+	[ -f "$HOME" ] || { echo "Missing $HOME" >&2; exit 1; }
+	loader_supported || exit $?
+
+	# Back up the current native page so uninstall restores the right firmware copy.
+	strip_old_tag "$HOME" >"$HOME.airvpn.clean"
+	if [ ! -f "$BACKUP" ] || ! cmp -s "$HOME.airvpn.clean" "$BACKUP"; then
+		cp -p "$HOME.airvpn.clean" "$BACKUP"
+		mkdir -p "$VERSIONED_BACKUP_DIR"
+		stamp="$(date +%Y%m%d-%H%M%S 2>/dev/null || date +%s)"
+		cp -p "$HOME.airvpn.clean" "$VERSIONED_BACKUP_DIR/gl_home.$stamp.html"
+		ls -1t "$VERSIONED_BACKUP_DIR"/gl_home.*.html 2>/dev/null | tail -n +6 | xargs -r rm -f
+	fi
+
+	mv "$HOME.airvpn.clean" "$HOME.airvpn.tmp1"
+	grep -q '</head>' "$HOME.airvpn.tmp1" || {
+		rm -f "$HOME.airvpn.tmp1"
+		echo "Could not find </head> in $HOME" >&2
+		exit 2
+	}
+
+	# Add the cache hint and bootstrap immediately before </head>.
+	sed "s#</head>#$CACHE_META$LOADER</head>#" "$HOME.airvpn.tmp1" >"$HOME.airvpn.tmp2"
+	rm -f "$HOME.airvpn.tmp1"
+	chmod 644 "$HOME.airvpn.tmp2"
+	mv "$HOME.airvpn.tmp2" "$HOME"
+	save_loader_meta
+	echo "AirVPN Admin Panel bootstrap installed inside GL.iNet <head> (loader $LOADER_VERSION)."
+}
+
+verify_patch() {
+	[ -f "$HOME" ] || { echo "missing-html"; exit 1; }
+	[ -x /www/cgi-bin/airvpn-native-ui ] || { echo "missing-no-store-ui-cgi"; exit 1; }
+	[ -f /www/airvpn-native-ui.js ] || { echo "missing-js"; exit 1; }
+	grep -q 'id="airvpn-native-loader"' "$HOME" || { echo "not-installed"; exit 1; }
+	grep -q "/cgi-bin/airvpn-native-ui?v=$LOADER_VERSION" "$HOME" || { echo "wrong-loader-version"; exit 2; }
+	before_head="$(sed 's#</head>#</head>\n#' "$HOME" | head -n1)"
+	case "$before_head" in
+		*airvpn-native-loader*)
+			echo "installed-in-head"
+			echo "loader-version=$LOADER_VERSION"
+			echo "ui-source=/cgi-bin/airvpn-native-ui (Cache-Control: no-store)"
+			;;
+		*) echo "installed-but-misplaced"; exit 2;;
+	esac
+}
+
+case "${1:-install}" in
+	install|repair) install_patch;;
+	remove)
+		if [ -f "$BACKUP" ]; then
+			cp -p "$BACKUP" "$HOME"
+			rm -f "$BACKUP"
+		else
+			strip_old_tag "$HOME" >"$HOME.airvpn.tmp"
+			mv "$HOME.airvpn.tmp" "$HOME"
+		fi
+		echo "AirVPN Admin Panel injection removed."
+		;;
+	status)
+		if grep -q 'airvpn-native-loader' "$HOME" 2>/dev/null; then echo installed; else echo not-installed; fi;;
+	verify) verify_patch;;
+	*) echo "Usage: airvpn-ui-patch {install|repair|remove|status|verify}" >&2; exit 2;;
+esac

@@ -1,0 +1,86 @@
+#!/bin/sh
+set -eu
+
+CFG=airvpn_native.main
+API=https://airvpn.org/api
+STATE=/etc/airvpn-native
+API_KEY_FILE=$STATE/api.key
+MANAGED=$STATE/managed-peers
+DASHBOARD_TUNNEL_ID_FILE=$STATE/dashboard-tunnel-id
+PROFILE_SOURCE_DIR=$STATE/profile-sources
+GROUPID_FILE=$STATE/group-id
+CACHE_DIR=$STATE/cache
+LOCKDIR=$STATE/lock
+BACKUP_DIR=$STATE/last-known-good
+REFRESH_STATUS=$STATE/raw-status.refresh
+PLUGIN_VERSION=0.11.10
+
+log() { logger -t airvpn-native "$*"; printf '%s\n' "$*" >&2; }
+get() { uci -q get "$CFG.$1" 2>/dev/null || true; }
+
+atomic_replace() { src="$1"; dst="$2"; mode="${3:-600}"; tmp="${dst}.tmp.$$"; cp "$src" "$tmp"; chmod "$mode" "$tmp"; mv "$tmp" "$dst"; }
+
+# Profile/tunnel mutations are serialized on the router.  The lock records
+# enough ownership metadata to distinguish a real concurrent request from a
+# stale/hung operation, and is re-entrant within one airvpn-native process.
+LOCK_DEPTH=0
+
+AIRVPN_LIB=/usr/lib/airvpn-native
+for _airvpn_mod in core airvpn-api glinet-vpn profiles catalog generator workflows diagnostics config; do
+	. "$AIRVPN_LIB/${_airvpn_mod}.sh"
+done
+unset _airvpn_mod
+
+case "${1:-}" in
+	status) json_status;;
+	raw-status) raw_status_cached;;
+	raw-status-refresh) raw_status_refresh;;
+	raw-status-meta) raw_status_meta;;
+	raw-status-background-refresh) raw_status_background_refresh;;
+	background-refresh-schedule) background_refresh_schedule;;
+	latency-test) latency_test "${2:-}";;
+	connection-validate) connection_validate;;
+	sync-connect) sync_connect_selected "${2:-}";;
+	rollback) rollback_state;;
+	self-test) self_test;;
+	diagnostics-export) diagnostics_export;;
+	generator-diagnostic) generator_diagnostic "${2:-}";;
+	generator-diagnostic-start) generator_diagnostic_start "${2:-}";;
+	generator-diagnostic-run) generator_diagnostic_run "${2:-}" "${3:-}";;
+	generator-diagnostic-status) generator_diagnostic_status "${2:-}";;
+	vpn-power-status) vpn_power_status;;
+	vpn-power-set) vpn_power_set "${2:-}";;
+	servers) servers;;
+	server-catalog) server_catalog "${2:-ALL}";;
+	server-countries) server_countries;;
+	filtered-servers) filtered_servers "${2:-earth}";;
+	tunnels) tunnels;;
+	tunnel-status) tunnel_status;;
+	native-profile) native_profile;;
+	profile-files) profile_files;;
+	native-diag) native_diag;;
+	dashboard-diag) dashboard_diag;;
+	dashboard-repair) dashboard_repair "${2:-}";;
+	native-tunnel-test) native_tunnel_test "${2:-}" "${3:-}";;
+	target-check) target_check && echo "GL-MT6000 firmware 4.9.1 target check passed.";;
+	cache-status) cache_status;;
+	clear-cache) clear_cache;;
+	api-key-status) api_key_status;;
+	set-api-key) set_api_key "${2:-}";;
+	set-api-key-stdin) set_api_key_stdin;;
+	clear-api-key) clear_api_key;;
+	userinfo) userinfo;;
+	devices) devices;;
+	sync) sync_profiles;;
+	add-profile) add_profile_selected "${2:-}";;
+	add-profile-start) add_profile_job_start "${2:-}";;
+	add-profile-job-run) add_profile_job_run "${2:-}" "${3:-}";;
+	add-profile-status) add_profile_job_status "${2:-}";;
+	list) list_profiles;;
+	select) select_profile "${2:-}";;
+	set) setcfg "${2:-}" "${3:-}";;
+	remove-managed) purge_all_managed;;
+	*)
+		echo "Usage: airvpn-native {status|raw-status|raw-status-refresh|raw-status-meta|raw-status-background-refresh|background-refresh-schedule|servers|server-catalog [ALL|CC]|server-countries|filtered-servers [SELECTOR]|tunnels|tunnel-status|native-profile|profile-files|native-diag|target-check|cache-status|clear-cache|api-key-status|set-api-key KEY|set-api-key-stdin|clear-api-key|userinfo|devices|generator-diagnostic [SERVER]|generator-diagnostic-start [SERVER]|generator-diagnostic-status JOB|sync|add-profile SERVER|add-profile-start SERVER|add-profile-status JOB|list|select PEER|set KEY VALUE|remove-managed}" >&2
+		exit 1;;
+esac

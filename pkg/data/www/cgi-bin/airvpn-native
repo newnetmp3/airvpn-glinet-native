@@ -1,0 +1,72 @@
+#!/bin/sh
+# Authenticated bridge between the GL.iNet Admin Panel and AirVPN rpcd methods.
+. /usr/share/libubox/jshn.sh
+. /usr/lib/airvpn-native/http-auth.sh
+
+printf 'Content-Type: application/json\r\n'
+printf 'Cache-Control: no-store\r\n'
+printf 'X-Content-Type-Options: nosniff\r\n'
+printf '\r\n'
+
+fail() {
+	code="$1"; msg="$2"
+	json_init
+	json_add_boolean ok 0
+	json_add_int code "$code"
+	json_add_string error "$msg"
+	json_dump
+	exit 0
+}
+
+[ "${REQUEST_METHOD:-}" = "POST" ] || fail 405 "POST required"
+
+len="${CONTENT_LENGTH:-0}"
+case "$len" in *[!0-9]*|'') len=0;; esac
+[ "$len" -le 65536 ] || fail 413 "Request too large"
+
+body="$(dd bs=1 count="$len" 2>/dev/null)"
+json_load "$body" 2>/dev/null || fail 400 "Invalid JSON"
+json_get_var method method
+json_get_var args_json args_json
+
+[ -n "${method:-}" ] || fail 400 "Missing method"
+[ -n "${args_json:-}" ] || args_json='{}'
+
+# Validate the native same-origin Admin-Token cookie server-side.
+token="$(airvpn_admin_token_from_cookie "${HTTP_COOKIE:-}" 2>/dev/null || true)"
+[ -n "$token" ] || fail 401 "Missing or invalid GL.iNet Admin-Token cookie"
+
+# Only expose methods used by the AirVPN page.
+case "$method" in
+	get_config|set_config|api_key_status|set_api_key|clear_api_key|\
+	status|raw_status|raw_status_refresh|raw_status_meta|userinfo|devices|servers|server_catalog|server_countries|filtered_servers|tunnels|native_profile|\
+	profile_files|native_diag|target_check|cache_status|clear_cache|sync|add_profile|add_profile_start|add_profile_status|sync_connect|connection_validate|rollback|latency_test|self_test|diagnostics_export|generator_diag|generator_diag_start|generator_diag_status|vpn_power_status|vpn_power_set|list)
+		;;
+	*) fail 403 "AirVPN method not allowed";;
+esac
+
+# Verify the GL.iNet session before dispatching privileged local methods.
+verify_payload="{\"jsonrpc\":\"2.0\",\"id\":5052,\"method\":\"call\",\"params\":[\"$token\",\"system\",\"get_status\",{}]}"
+verify="$(curl -sS --max-time 5 \
+	-H 'Content-Type: application/json' \
+	-H 'glinet: 1' \
+	-H "Cookie: Admin-Token=$token" \
+	-d "$verify_payload" \
+	http://127.0.0.1/rpc 2>/dev/null || true)"
+
+[ -n "$verify" ] || fail 502 "Unable to validate GL.iNet Admin-Token cookie"
+printf '%s' "$verify" | jsonfilter -e '@.result' >/dev/null 2>&1 || fail 401 "GL.iNet Admin-Token cookie rejected"
+
+# Dispatch through the package-local rpcd executable.
+result="$(printf '%s' "$args_json" | /usr/libexec/rpcd/airvpn_native call "$method" 2>&1)"
+rc=$?
+[ "$rc" -eq 0 ] || {
+	json_init
+	json_add_boolean ok 0
+	json_add_int code "$rc"
+	json_add_string error "$result"
+	json_dump
+	exit 0
+}
+
+printf '%s\n' "$result"

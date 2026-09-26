@@ -1,0 +1,110 @@
+#!/bin/sh
+. /usr/share/libubox/jshn.sh
+reply_exec() {
+	out="$("$@" 2>&1)"; rc=$?
+	json_init; json_add_int code "$rc"; json_add_string output "$out"; json_dump
+}
+case "$1" in
+ list)
+ cat <<'EOF'
+{"status":{},"raw_status":{},"raw_status_refresh":{},"raw_status_meta":{},"servers":{},"server_catalog":{"country":"String"},"server_countries":{},"filtered_servers":{"selector":"String"},"tunnels":{},"native_profile":{},"profile_files":{},"native_diag":{},"target_check":{},"cache_status":{},"clear_cache":{},"api_key_status":{},"set_api_key":{"api_key":"String"},"clear_api_key":{},"userinfo":{},"devices":{},"sync":{},"add_profile":{"selector":"String"},"add_profile_start":{"selector":"String"},"add_profile_status":{"job":"String"},"sync_connect":{"selector":"String"},"connection_validate":{},"rollback":{},"latency_test":{"targets":"String"},"self_test":{},"diagnostics_export":{},"generator_diag":{"selector":"String"},"generator_diag_start":{"selector":"String"},"generator_diag_status":{"job":"String"},"vpn_power_status":{},"vpn_power_set":{"state":"String"},"list":{},"get_config":{},"set_config":{"device":"String","selectors":"String","protocol":"String","resolve":"String","ip_layer":"String","dns_mode":"String","mtu":"String","keepalive":"String","local_access":"Boolean","masquerade":"Boolean","group_name":"String","prefix":"String","cleanup_managed":"Boolean","auto_sync":"Boolean","strict_target":"Boolean","native_reload":"Boolean","discovery_mode":"String","health_only":"Boolean","min_score":"String","max_load":"String","include_server":"String","exclude_server":"String","country_filter":"String","use_server_discovery":"Boolean","sort_column":"String","sort_direction":"String","favorites":"String","server_exclusions":"String","latency_candidates":"String","refresh_min_seconds":"String","cache_min_servers":"String","smart_rank":"Boolean","column_order":"String","hidden_columns":"String"}}
+EOF
+ ;;
+ call)
+	method="$2"; input="$(cat)"
+	case "$method" in
+	 status|userinfo|devices) /usr/bin/airvpn-native "$method" 2>/dev/null || echo '{}';;
+	 raw_status) /usr/bin/airvpn-native raw-status 2>/dev/null || echo '{}';;
+	 raw_status_refresh) /usr/bin/airvpn-native raw-status-refresh 2>/dev/null || echo '{}';;
+	 raw_status_meta) /usr/bin/airvpn-native raw-status-meta 2>/dev/null || echo '{"cached":false,"age_seconds":0,"refresh_seconds":18000}';;
+	 servers) json_init; json_add_string output "$(/usr/bin/airvpn-native servers 2>&1 || true)"; json_dump;;
+	 server_catalog)
+		json_load "$input"; json_get_var country country
+		reply_exec /usr/bin/airvpn-native server-catalog "${country:-ALL}";;
+	 server_countries) json_init; json_add_string output "$(/usr/bin/airvpn-native server-countries 2>&1 || true)"; json_dump;;
+	 filtered_servers)
+		json_load "$input"; json_get_var sel selector
+		reply_exec /usr/bin/airvpn-native filtered-servers "${sel:-earth}";;
+	 tunnels) json_init; json_add_string output "$(/usr/bin/airvpn-native tunnels 2>&1 || true)"; json_dump;;
+	 native_profile) json_init; json_add_string output "$(/usr/bin/airvpn-native native-profile 2>&1 || true)"; json_dump;;
+	 profile_files) json_init; json_add_string output "$(/usr/bin/airvpn-native profile-files 2>&1 || true)"; json_dump;;
+	 native_diag) json_init; json_add_string output "$(/usr/bin/airvpn-native native-diag 2>&1 || true)"; json_dump;;
+	 target_check) reply_exec /usr/bin/airvpn-native target-check;;
+	 cache_status) json_init; json_add_string output "$(/usr/bin/airvpn-native cache-status 2>/dev/null || true)"; json_dump;;
+	 clear_cache) reply_exec /usr/bin/airvpn-native clear-cache;;
+	 api_key_status) /usr/bin/airvpn-native api-key-status 2>/dev/null || echo '{"configured":false,"storage":"error"}';;
+	 set_api_key)
+		json_load "$input"; json_get_var k api_key
+		if [ -z "${k:-}" ]; then
+			json_init; json_add_boolean ok 0; json_add_string error "API key is empty"; json_dump
+		else
+			out="$(printf '%s' "$k" | /usr/bin/airvpn-native set-api-key-stdin 2>&1)"; rc=$?
+			json_init; json_add_boolean ok "$([ "$rc" -eq 0 ] && echo 1 || echo 0)"; json_add_int code "$rc"; json_add_string output "$out"; json_dump
+		fi;;
+	 clear_api_key) reply_exec /usr/bin/airvpn-native clear-api-key;;
+	 sync) reply_exec /usr/bin/airvpn-native sync;;
+	 add_profile)
+		json_load "$input"; json_get_var selector selector
+		reply_exec /usr/bin/airvpn-native add-profile "${selector:-}";;
+	 add_profile_start)
+		json_load "$input"; json_get_var selector selector
+		reply_exec /usr/bin/airvpn-native add-profile-start "${selector:-}";;
+	 add_profile_status)
+		json_load "$input"; json_get_var job job
+		reply_exec /usr/bin/airvpn-native add-profile-status "${job:-}";;
+	 sync_connect)
+		json_load "$input"; json_get_var selector selector
+		reply_exec /usr/bin/airvpn-native sync-connect "${selector:-}";;
+	 connection_validate) reply_exec /usr/bin/airvpn-native connection-validate;;
+	 rollback) reply_exec /usr/bin/airvpn-native rollback;;
+	 latency_test)
+		json_load "$input"; json_get_var targets targets
+		reply_exec /usr/bin/airvpn-native latency-test "${targets:-}";;
+	 self_test) reply_exec /usr/bin/airvpn-native self-test;;
+	 diagnostics_export) reply_exec /usr/bin/airvpn-native diagnostics-export;;
+	 generator_diag)
+		json_load "$input"; json_get_var selector selector
+		reply_exec /usr/bin/airvpn-native generator-diagnostic "${selector:-}";;
+	 generator_diag_start)
+		json_load "$input"; json_get_var selector selector
+		reply_exec /usr/bin/airvpn-native generator-diagnostic-start "${selector:-}";;
+	 generator_diag_status)
+		json_load "$input"; json_get_var job job
+		reply_exec /usr/bin/airvpn-native generator-diagnostic-status "${job:-}";;
+	 vpn_power_status) reply_exec /usr/bin/airvpn-native vpn-power-status;;
+	 vpn_power_set)
+		json_load "$input"; json_get_var state state
+		reply_exec /usr/bin/airvpn-native vpn-power-set "${state:-}";;
+	 list) json_init; json_add_string output "$(/usr/bin/airvpn-native list 2>/dev/null || true)"; json_dump;;
+	 get_config)
+		json_init
+		for k in device selectors protocol resolve ip_layer dns_mode mtu keepalive group_name prefix discovery_mode min_score max_load include_server exclude_server country_filter sort_column sort_direction favorites server_exclusions latency_candidates refresh_min_seconds cache_min_servers smart_rank column_order hidden_columns; do
+			v="$(uci -q get airvpn_native.main.$k 2>/dev/null || true)"
+			json_add_string "$k" "$v"
+		done
+		for k in local_access masquerade cleanup_managed auto_sync strict_target native_reload health_only use_server_discovery; do
+			v="$(uci -q get airvpn_native.main.$k 2>/dev/null || echo 0)"
+			json_add_boolean "$k" "$([ "$v" = 1 ] && echo 1 || echo 0)"
+		done
+		json_dump;;
+	 set_config)
+		json_load "$input"
+		for k in device selectors protocol resolve ip_layer dns_mode mtu keepalive group_name prefix discovery_mode min_score max_load include_server exclude_server country_filter sort_column sort_direction favorites server_exclusions latency_candidates refresh_min_seconds cache_min_servers column_order hidden_columns; do
+			json_get_type t "$k" 2>/dev/null || t=""
+			[ -n "$t" ] || continue
+			json_get_var v "$k"
+			out="$(/usr/bin/airvpn-native set "$k" "${v:-}" 2>&1)"; rc=$?
+			if [ "$rc" -ne 0 ]; then json_init; json_add_boolean ok 0; json_add_int code "$rc"; json_add_string error "$out"; json_dump; exit 0; fi
+		done
+		for k in local_access masquerade cleanup_managed auto_sync strict_target native_reload health_only use_server_discovery smart_rank; do
+			json_get_type t "$k" 2>/dev/null || t=""
+			[ -n "$t" ] || continue
+			json_get_var v "$k"
+			case "$v" in 1|true) v=1;; *) v=0;; esac
+			out="$(/usr/bin/airvpn-native set "$k" "$v" 2>&1)"; rc=$?
+			if [ "$rc" -ne 0 ]; then json_init; json_add_boolean ok 0; json_add_int code "$rc"; json_add_string error "$out"; json_dump; exit 0; fi
+		done
+		json_init; json_add_boolean ok 1; json_dump;;
+	 *) echo '{"error":"unknown method"}';;
+	esac;;
+esac

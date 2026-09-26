@@ -1,0 +1,59 @@
+#!/bin/sh
+set -eu
+
+STATE="/etc/airvpn-native"
+SEED="$STATE/background-refresh.schedule"
+CRON="/etc/crontabs/root"
+TAG="# airvpn-native-background-refresh"
+
+mkdir -p "$STATE"
+chmod 700 "$STATE"
+
+random_byte() {
+	od -An -N1 -tu1 /dev/urandom 2>/dev/null | tr -d ' '
+}
+
+if [ -s "$SEED" ]; then
+	. "$SEED"
+else
+	b1="$(random_byte)"; b2="$(random_byte)"
+	[ -n "$b1" ] || b1=$(( $(date +%S 2>/dev/null || echo 17) + $$ ))
+	[ -n "$b2" ] || b2=$(( $(date +%M 2>/dev/null || echo 23) + $$ ))
+	MINUTE=$((b1 % 60))
+	HOUR_OFFSET=$((b2 % 5))
+	umask 077
+	{
+		echo "MINUTE=$MINUTE"
+		echo "HOUR_OFFSET=$HOUR_OFFSET"
+	} >"$SEED"
+	chmod 600 "$SEED"
+fi
+
+case "${MINUTE:-}" in ''|*[!0-9]*) MINUTE=17;; esac
+case "${HOUR_OFFSET:-}" in ''|*[!0-9]*) HOUR_OFFSET=0;; esac
+MINUTE=$((MINUTE % 60))
+HOUR_OFFSET=$((HOUR_OFFSET % 5))
+
+# Every 5 hours at a per-installation randomized hour phase and minute.
+# Example phases: 0,5,10,15,20 or 3,8,13,18,23.
+hours=""
+h="$HOUR_OFFSET"
+while [ "$h" -lt 24 ]; do
+	[ -n "$hours" ] && hours="$hours,"
+	hours="${hours}${h}"
+	h=$((h+5))
+done
+
+mkdir -p "$(dirname "$CRON")"
+touch "$CRON"
+
+tmp="${CRON}.airvpn-native.$$"
+grep -vF "$TAG" "$CRON" 2>/dev/null >"$tmp" || true
+printf '%s %s * * * /usr/bin/airvpn-native raw-status-background-refresh >/dev/null 2>&1 %s\n' \
+	"$MINUTE" "$hours" "$TAG" >>"$tmp"
+mv "$tmp" "$CRON"
+chmod 600 "$CRON"
+
+[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
+
+printf 'AirVPN background refresh schedule: minute %02d, hours %s\n' "$MINUTE" "$hours"
