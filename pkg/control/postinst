@@ -1,0 +1,32 @@
+#!/bin/sh
+# AirVPN native rebase installer for GL-MT6000 / GL.iNet 4.9.1.
+[ -n "${IPKG_INSTROOT:-}" ] && exit 0
+
+mkdir -p /etc/airvpn-native
+chmod 700 /etc/airvpn-native
+chmod 600 /etc/config/airvpn_native 2>/dev/null || true
+
+/usr/lib/airvpn-native/install-migrations.sh >/dev/null 2>&1 || logger -t airvpn-native "Legacy install migration reported an error"
+/usr/bin/airvpn-native-migrate >/dev/null 2>&1 || logger -t airvpn-native "UCI migration failed"
+
+# AirVPN is injected as a dedicated item in the native VPN sidebar, not registered
+# as a LuCI child route. Remove remnants from older routing experiments.
+rm -f /usr/share/luci/menu.d/luci-app-airvpn-native.json \
+      /usr/share/luci/menu.d/airvpn-native.json \
+      /usr/share/luci/menu.d/airvpn_native.json \
+      /usr/share/oui/menu.d/airvpn-native.json \
+      /usr/share/oui/menu.d/airvpn_native.json \
+      /usr/share/rpcd/acl.d/luci-app-airvpn-native.json 2>/dev/null || true
+rm -rf /www/luci-static/resources/view/airvpn_native 2>/dev/null || true
+
+chmod 755 /usr/bin/airvpn-native /usr/bin/airvpn-native-migrate /usr/bin/airvpn-native-schedule /usr/bin/airvpn-ui-patch 2>/dev/null || true
+chmod 755 /www/cgi-bin/airvpn-native /www/cgi-bin/airvpn-native-ui /usr/libexec/rpcd/airvpn_native 2>/dev/null || true
+/etc/init.d/airvpn-native enable >/dev/null 2>&1 || true
+
+# rpcd restart is needed only to register the package's own CGI/rpcd endpoint;
+# runtime VPN changes no longer restart it.
+/etc/init.d/rpcd restart >/dev/null 2>&1 || true
+/usr/bin/airvpn-ui-patch repair >/dev/null 2>&1 || logger -t airvpn-native "Admin Panel AirVPN sidebar injection failed"
+rm -f /tmp/luci-indexcache 2>/dev/null || true
+[ -x /usr/bin/airvpn-native-schedule ] && /usr/bin/airvpn-native-schedule >/dev/null 2>&1 || logger -t airvpn-native "Background refresh scheduling failed"
+exit 0

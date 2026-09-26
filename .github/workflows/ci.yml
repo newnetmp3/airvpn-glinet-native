@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run smoke tests
+        run: |
+          set -eu
+          for test in tests/*.sh; do
+            sh "$test"
+          done
+      - name: Build package
+        run: ./build-ipk.sh /tmp/airvpn-glinet-native.ipk

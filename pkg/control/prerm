@@ -1,0 +1,15 @@
+#!/bin/sh
+/etc/init.d/airvpn-native disable >/dev/null 2>&1 || true
+/usr/bin/airvpn-ui-patch remove >/dev/null 2>&1 || true
+rm -f /www/cgi-bin/airvpn-native /www/cgi-bin/airvpn-native-ui 2>/dev/null || true
+
+CRON="/etc/crontabs/root"
+TAG="# airvpn-native-background-refresh"
+if [ -f "$CRON" ]; then
+	tmp="${CRON}.airvpn-native.$$"
+	grep -vF "$TAG" "$CRON" >"$tmp" 2>/dev/null || true
+	mv "$tmp" "$CRON"
+	chmod 600 "$CRON" 2>/dev/null || true
+fi
+[ -x /etc/init.d/cron ] && /etc/init.d/cron restart >/dev/null 2>&1 || true
+exit 0

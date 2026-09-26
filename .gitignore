@@ -1,0 +1,5 @@
+.build-ipk.*
+*.ipk
+*.tar.gz
+*.sha256
+.DS_Store
