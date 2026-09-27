@@ -1,0 +1,60 @@
+name: Release IPK
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'pkg/**'
+      - 'build-ipk.sh'
+      - '.github/workflows/release.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Run smoke tests
+        run: |
+          set -eu
+          for test in tests/*.sh; do
+            sh "$test"
+          done
+
+      - name: Build IPK
+        id: build
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="$(awk '$1 == "Version:" { print $2; exit }' pkg/control/control)"
+          [ -n "$VERSION" ]
+          TAG="v${VERSION%-*}"
+          ASSET="airvpn-glinet-native_${VERSION}_all.ipk"
+          ./build-ipk.sh "$ASSET"
+          sha256sum "$ASSET" > SHA256SUMS.txt
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "asset=$ASSET" >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.build.outputs.tag }}
+          VERSION: ${{ steps.build.outputs.version }}
+          ASSET: ${{ steps.build.outputs.asset }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" "$ASSET" SHA256SUMS.txt --clobber
+          else
+            gh release create "$TAG" "$ASSET" SHA256SUMS.txt               --title "AirVPN GL.iNet Native $VERSION"               --generate-notes               --target "$GITHUB_SHA"
+          fi
