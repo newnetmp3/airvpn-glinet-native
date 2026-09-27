@@ -38,7 +38,7 @@ jobs:
           [ -n "$VERSION" ]
           TAG="v${VERSION%-*}"
           ASSET="airvpn-glinet-native_${VERSION}_all.ipk"
-          ./build-ipk.sh "$ASSET"
+          ./build-ipk.sh "$GITHUB_WORKSPACE/$ASSET"
           sha256sum "$ASSET" > SHA256SUMS.txt
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
