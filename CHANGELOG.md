@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.12
+
+- Fixed the Server Browser repeatedly rebuilding its table while VPN status was polled.
+- VPN status polling now updates only the selected-server row highlight, preserving table scroll position.
+- Includes the 0.11.11 Info dialog Close-button fix.
+
 ## 0.11.11
 
 - Fixed the Close button in the server Info dialog.

@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-window.__AIRVPN_UI_VERSION__='0.11.11';
+window.__AIRVPN_UI_VERSION__='0.11.12';
 function installStylesheet(){
   var id='airvpn-native-stylesheet';
   var current=document.getElementById(id);
@@ -398,6 +398,16 @@ function setVpnPowerButton(state){
     else b.title=on?'Disable the mapped AirVPN tunnel':'Enable the mapped AirVPN tunnel';
   }
 }
+function updateSelectedServer(name){
+  var selected=String(name||'');
+  if(A.selectedServer===selected)return;
+  A.selectedServer=selected;
+  var table=document.getElementById('avcatalogtable');
+  if(!table)return;
+  table.querySelectorAll('tr[data-server-name]').forEach(function(row){
+    row.classList.toggle('avselectedserver',row.dataset.serverName===selected);
+  });
+}
 function refreshVpnPower(){
   if(A.vpnPowerRefreshBusy)return Promise.resolve(null);
   A.vpnPowerRefreshBusy=true;
@@ -405,7 +415,7 @@ function refreshVpnPower(){
     var data=r&&r.output;
     if(typeof data==='string'){try{data=JSON.parse(data)}catch(_){data={}}}
     setVpnPowerButton(data||{});
-    if(data&&data.selector){A.selectedServer=String(data.selector);if(A.catalogRows&&A.catalogRows.length)makeServerTable('avcatalogtable',A.catalogRows,true);}
+    if(data&&data.selector)updateSelectedServer(data.selector);
     return data;
   }).catch(function(){
     setVpnPowerButton({mapped:0,on:false});
@@ -885,7 +895,8 @@ function makeServerTable(target,t,sortable){
     var tr=document.createElement('tr');
     var sk=serverKey(r);
     tr.dataset.serverKey=sk;
-    if(A.selectedServer===String(r[0]||''))tr.classList.add('avselectedserver');
+    tr.dataset.serverName=String(r[0]||'');
+    if(A.selectedServer===tr.dataset.serverName)tr.classList.add('avselectedserver');
 
     var actionTd=document.createElement('td');actionTd.className='avactioncol';
     actionTd.style.width=AV_ACTION_WIDTH+'px';actionTd.style.minWidth=AV_ACTION_WIDTH+'px';actionTd.style.maxWidth=AV_ACTION_WIDTH+'px';

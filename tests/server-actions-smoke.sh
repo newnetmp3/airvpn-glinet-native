@@ -27,6 +27,12 @@ fi
 
 grep -q 'data-server-close' "$UI"
 grep -Fq "ev.target===m||ev.target.closest('[data-server-close]')" "$UI"
+grep -q "function updateSelectedServer" "$UI"
+grep -q "tr.dataset.serverName=String(r\[0\]||'')" "$UI"
+if sed -n '/function refreshVpnPower(){/,/^}/p' "$UI" | grep -q "makeServerTable"; then
+  echo "FAIL VPN status polling still rebuilds the server table" >&2
+  exit 1
+fi
 if grep -Fq "var cl=e.target.closest('[data-server-close]')" "$UI"; then
   echo "FAIL server Info close still depends on the panel click delegate" >&2
   exit 1
