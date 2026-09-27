@@ -5,7 +5,7 @@ HOME=/www/gl_home.html
 BACKUP=/www/gl_home.html.airvpn-native.orig
 META=/etc/airvpn-native/ui-loader.meta
 VERSIONED_BACKUP_DIR=/etc/airvpn-native/ui-loader-backups
-LOADER_VERSION=204
+LOADER_VERSION=205
 # Inline bootstrap; the CGI response is no-store and the query string changes per load.
 CACHE_META='<meta id="airvpn-native-cache-control" http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">'
 LOADER="<script id=\"airvpn-native-loader\">(function(){if(window.__airvpnLoaderStarted)return;window.__airvpnLoaderStarted=1;var s=document.createElement(\"script\");s.src=\"/cgi-bin/airvpn-native-ui?v=${LOADER_VERSION}-\"+Date.now();s.async=false;s.dataset.airvpnLoader=\"${LOADER_VERSION}\";s.onerror=function(){window.__airvpnLoaderStarted=0;console.error(\"AirVPN UI loader failed\")};document.head.appendChild(s)})();</script>"

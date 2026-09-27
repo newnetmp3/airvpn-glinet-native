@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.11.11
+
+- Fixed the Close button in the server Info dialog.
+- Bound the dialog close action directly to the modal instead of relying on the AirVPN page click delegate.
+- Added a regression check for the Info dialog close path.
+
 ## 0.11.10
 
 - Simplified the Server Browser Actions column to **Info** and **Select**.

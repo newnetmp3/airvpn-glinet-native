@@ -20,7 +20,7 @@ grep -q "setInterval(tick,750)" "$UI"
 grep -q "removeAttribute('href')" "$UI"
 grep -q "z-index:2147482000" "$CSS"
 grep -q "airvpn-native-ui.css?v=" "$UI"
-grep -q "LOADER_VERSION=204" "$PATCH"
+grep -q "LOADER_VERSION=205" "$PATCH"
 grep -q '/cgi-bin/airvpn-native-ui?v=${LOADER_VERSION}-' "$PATCH"
 grep -Fq 's.dataset.airvpnLoader=\"${LOADER_VERSION}\"' "$PATCH"
 

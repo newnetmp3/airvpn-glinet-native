@@ -13,7 +13,7 @@ CACHE_DIR=$STATE/cache
 LOCKDIR=$STATE/lock
 BACKUP_DIR=$STATE/last-known-good
 REFRESH_STATUS=$STATE/raw-status.refresh
-PLUGIN_VERSION=0.11.10
+PLUGIN_VERSION=0.11.11
 
 log() { logger -t airvpn-native "$*"; printf '%s\n' "$*" >&2; }
 get() { uci -q get "$CFG.$1" 2>/dev/null || true; }

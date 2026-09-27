@@ -1,6 +1,6 @@
 (function(){
 'use strict';
-window.__AIRVPN_UI_VERSION__='0.11.10';
+window.__AIRVPN_UI_VERSION__='0.11.11';
 function installStylesheet(){
   var id='airvpn-native-stylesheet';
   var current=document.getElementById(id);
@@ -1390,7 +1390,7 @@ function showServerInfo(r){
     '<button type="button" class="rowbtn" data-server-close title="Close">Close</button></div>'+
     '<div class="avdetails">'+rows+'</div></div>';
   document.body.appendChild(m);
-  m.addEventListener('click',function(ev){if(ev.target===m)closeServerModal()});
+  m.addEventListener('click',function(ev){if(ev.target===m||ev.target.closest('[data-server-close]'))closeServerModal()});
 }
 function setProfileMutationBusy(on,label){
   A.profileMutationBusy=!!on;A.profileMutationLabel=on?(label||'AirVPN profile operation'):'';
@@ -1598,7 +1598,6 @@ function act(e){
       return;
     }
   }
-  var cl=e.target.closest('[data-server-close]');if(cl){e.preventDefault();closeServerModal();return}
   var th=e.target.closest('th[data-sort]');
   if(th){
     toggleCatalogSort(th.dataset.sort);

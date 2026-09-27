@@ -26,6 +26,11 @@ if grep -q 'class="avmodalactions".*data-server-action' "$UI"; then
 fi
 
 grep -q 'data-server-close' "$UI"
+grep -Fq "ev.target===m||ev.target.closest('[data-server-close]')" "$UI"
+if grep -Fq "var cl=e.target.closest('[data-server-close]')" "$UI"; then
+  echo "FAIL server Info close still depends on the panel click delegate" >&2
+  exit 1
+fi
 node --check "$UI" >/dev/null
 
 echo "PASS server action UI contract"
